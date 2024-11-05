@@ -1,0 +1,13 @@
+
+[sentencepiece]
+# Core settings
+vocab_size = 8000           # Size of vocabulary
+model_type = "unigram"       # Algorithm type (unigram or bpe)
+character_coverage = 1.0     # Character coverage
+
+
+# Special tokens
+pad_token = "[PAD]"
+bos_token = "[BOS]"         # Beginning of sentence
+eos_token = "[EOS]"         # End of sentence
+unk_token = "[UNK]"         # Unknown token
