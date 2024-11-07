@@ -1,0 +1,42 @@
+[tool.poetry]
+name = "mlx5-4-transformers"
+version = "0.1.0"
+description = "Learning transformers 🤖"
+authors = ["John X <john.iv@x25bd.com>"]
+readme = "README.md"
+packages = [{include = "mlx5"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+annotated-types = "0.7.0"
+anyio = "4.5.2"
+beautifulsoup4 = "4.12.3"
+certifi = "2024.6.2"
+charset-normalizer = "3.3.2"
+distlib = "0.3.8"
+ebooklib = "0.18"
+exceptiongroup = "1.2.2"
+fastapi = "0.115.4"
+filelock = "3.15.4"
+fpdf = "1.7.2"
+html5lib = "1.1"
+idna = "3.7"
+lxml = "5.2.2"
+platformdirs = "4.2.2"
+pydantic = "2.9.2"
+pydantic-core = "2.23.4"
+requests = "2.32.3"
+six = "1.16.0"
+sniffio = "1.3.1"
+soupsieve = "2.5"
+starlette = "0.41.2"
+typing-extensions = "4.12.2"
+urllib3 = "2.2.2"
+virtualenv = "20.26.3"
+webencodings = "0.5.1"
+tomli-w = "^1.1.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
