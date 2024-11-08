@@ -2,6 +2,8 @@ import re
 import random
 import pickle
 import pandas as pd
+import torch
+
 
 # Read in text data from path
 def load_data(path):
@@ -62,6 +64,61 @@ def vocab_dicts(vocab):
     id2token = ["<UNK>", *vocab]
     token2id = {token: i for i, token in enumerate(id2token)}
     return id2token, token2id
+
+
+
+##### TORCH CLASSES #####
+
+class AlphabetDataset(torch.utils.data.Dataset):
+    def __init__(self, data, vocab_size, mask_prob=0.15):
+        self.data = data
+        self.vocab_size = vocab_size
+        self.mask_prob = mask_prob
+        self.mask_token = 0
+        self.pad_token_id = -100
+        self.mask_token_id = 0
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+
+        sequence = torch.tensor(self.data.iloc[idx]['actual'])
+        # Create masked input (x) and target (y)
+        x = sequence.clone()
+        
+        # Randomly select positions to mask
+        mask_positions = torch.rand(len(sequence)) < self.mask_prob
+        
+        # Apply masking strategy
+        for pos in range(len(sequence)):
+            if mask_positions[pos]:
+                rand = random.random()
+                if rand < 0.8:  # 80% mask token
+                    x[pos] = self.mask_token_id
+                elif rand < 0.9:  # 10% random token
+                    x[pos] = random.randint(1, self.vocab_size-1)
+                # else: 10% keep unchanged
+        
+        return sequence, x, mask_positions
+
+def collate(batch, pad_token_id=-100):
+
+    sequences, inputs, _ = zip(*batch)
+
+    padded_sequences = torch.nn.utils.rnn.pad_sequence(sequences, 
+                                                       batch_first=True, 
+                                                       padding_value=pad_token_id)
+    padded_inputs =  torch.nn.utils.rnn.pad_sequence(inputs, 
+                                                     batch_first=True, 
+                                                     padding_value=pad_token_id)
+
+    attention_mask = padded_sequences != pad_token_id
+
+    return padded_sequences, padded_inputs, attention_mask
+    
+
+
 
 
 if __name__ == "__main__":

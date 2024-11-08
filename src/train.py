@@ -12,32 +12,25 @@ import wandb
 from tqdm import tqdm
 
 from core import SimpleTransformer
+
+from utils.config import load_hyperparameters
 from utils.tokenizer import load_spm_model
 from utils.data import load_data
 
 # Set hyperparameters
-with open('HYPERPARAMETERS.toml', 'rb') as f:
-    hyperparams = tomli.load(f)
-
-# HYPERPARAMETERS
-# Sentencepiece
-VOCAB_SIZE = hyperparams['sentencepiece']['vocab_size']
-EMB_DIM = hyperparams['sentencepiece']['emb_dim']
-CHARACTER_COVERAGE = hyperparams['sentencepiece']['character_coverage']
-SPM_MODEL_TYPE = hyperparams['sentencepiece']['spm_model_type']
-
-# Model
-MAX_SEQ_LEN = hyperparams['model']['max_seq_len']
-# Training
-LEARNING_RATE = hyperparams['training']['learning_rate']
-BATCH_SIZE = hyperparams['training']['batch_size']
-# Environment
-SEED = hyperparams['environment']['seed']
-DEVICE = hyperparams['environment']['device']
+# Import HYPERPARAMETERS
+hyperparams = load_hyperparameters("./HYPERPARAMETERS.toml")
+VOCAB_SIZE = hyperparams['VOCAB_SIZE']
+EMB_DIM = hyperparams['EMB_DIM']
+MAX_SEQ_LEN = hyperparams['MAX_SEQ_LEN']
+LEARNING_RATE = hyperparams['LEARNING_RATE']
+BATCH_SIZE = hyperparams['BATCH_SIZE']
+SEED = hyperparams['SEED']
+DEVICE = hyperparams['DEVICE']
 
 torch.manual_seed(SEED)
 torch.device(DEVICE)
-
+print(hyperparams)
 
 # # Import tokenizer
 spm_processor, model_path = load_spm_model(

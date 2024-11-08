@@ -1,27 +1,31 @@
+[project]
+name = "mlx5.4-transformers"
+version = "0.1.0"
 
 [sentencepiece]
 # Core settings
-vocab_size = 8000            # Size of vocabulary
-emb_dim = 128                # Embedding dimension
+vocab_size = 27            # Size of vocabulary
+emb_dim = 256                # Embedding dimension
 spm_model_type = "unigram"       # Algorithm type (unigram or bpe)
 character_coverage = 1.0     # Character coverage
 
 # Special tokens
 pad_token = "[PAD]"
+pad_token_id = -100
 bos_token = "[BOS]"         # Beginning of sentence
 eos_token = "[EOS]"         # End of sentence
-unk_token = "[UNK]"         # Unknown token
+unk_token = "<UNK>"        # Unknown token
+mask_prob = 0.15
 
 [model]
-model_name = "mlx5.4-transformer"
-model_version = "0.1.0"
+model_name = "simple-transformer-alphabet"
 nn_model_type = "transformer"
-max_seq_len = 128
-hidden_size = 128
+max_seq_len = 10
+hidden_size = 256
 
 [training]
-batch_size = 16
-learning_rate = 0.001
+batch_size = 1
+learning_rate = 0.003
 
 [environment]
 device = "mps"
