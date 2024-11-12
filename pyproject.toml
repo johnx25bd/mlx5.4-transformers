@@ -7,7 +7,7 @@ readme = "README.md"
 packages = [{include = "mlx5"}]
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.10"
 annotated-types = "0.7.0"
 anyio = "4.5.2"
 beautifulsoup4 = "4.12.3"
@@ -44,6 +44,8 @@ tomli = "^2.0.2"
 datasets = "^3.1.0"
 sentencepiece = "^0.2.0"
 ipykernel = "^6.29.5"
+torchvision = "^0.20.1"
+pillow = "^11.0.0"
 
 
 [build-system]
