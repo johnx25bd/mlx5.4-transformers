@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Learning transformers 🤖"
 authors = ["John X <john.iv@x25bd.com>"]
 readme = "README.md"
-packages = [{include = "mlx5"}]
+# packages = [{include = "mlx5"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
