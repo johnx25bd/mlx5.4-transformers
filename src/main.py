@@ -120,7 +120,7 @@ def train(num_epochs=10, num_examples=1):
                               num_atn_blocks=8)
     
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
     loss_fn = nn.CrossEntropyLoss()
     scheduler = ReduceLROnPlateau(optimizer, 
                                   mode='min', 
@@ -141,13 +141,17 @@ def train(num_epochs=10, num_examples=1):
         - Loss: almost identical
         - Accuracy: 0.2 (random), with a few odd periods of 40% 🤔
         - Adding in step decay to learning rate
-    [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay
+    [x] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay
+        - Converged after ~250 epochs, then at 15815 dropped off again massively
+        - Loss mirrored prior behavior, then dropped off again quickly. Second convergence at 0.666
+        - Accuracy rose between epoch 10k and 15k, to 0.6, then at 35727 jumped to 0.8
+        - Weird behavior, but it's learning ... ? 🤷‍♂️
     [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention
     [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention, plus dropout
     [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention, plus dropout, plus positional encoding
     """
     
-    wandb.init(project="mlx5.4-transformers", name=f"py-image-encoder-345215e-{timestamp}")
+    wandb.init(project="mlx5.4-transformers", name=f"py-image-encoder-5e7eca3-{timestamp}")
 
     orig_img, orig_label = ds[0]  
     epoch_loss = 0
@@ -176,16 +180,17 @@ def train(num_epochs=10, num_examples=1):
             epoch_loss += loss.item()
             if epoch % 20000 == 0:
                 print(f'epoch: {epoch}, example: {i}')
-                orig_img.show()
+                # orig_img.show()
                 print('Actual:', label)
                 print('Pred:', logits.argmax(dim=1))
                 print("loss:", loss.item())
         
         if epoch % 100 == 0:
             avg_epoch_loss = epoch_loss / 100
-            print(f'Epoch {epoch} completed, avg_loss: {avg_epoch_loss}')
             scheduler.step(avg_epoch_loss)
             epoch_loss = 0
+            if epoch % 1000 == 0:
+                print(f'Epoch {epoch} completed, avg_loss: {avg_epoch_loss}')
     wandb.finish()
 
 

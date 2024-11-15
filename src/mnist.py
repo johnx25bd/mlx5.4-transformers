@@ -63,8 +63,8 @@ class Attention(nn.Module):
         atn_output = atn_weights @ V
         atn_output = self.norm(atn_output + encoding) # Added residual connection + normalization!
         # Bes projects here!
-        # out = self.project(atn_output)
-        return atn_output # return out
+        out = self.project(atn_output)
+        return out # return out
 
 class MaskedAttention(Attention):
     def __init__(self, emb_size):
@@ -74,6 +74,8 @@ class MaskedAttention(Attention):
         self.W_K = nn.Linear(self.emb_size, self.emb_size)
         self.W_V = nn.Linear(self.emb_size, self.emb_size)
         self.norm = nn.LayerNorm(self.emb_size)
+        self.project = nn.Linear(self.emb_size, self.emb_size)
+
     def forward(self, encoding):
         Q = self.W_Q(encoding)
         K = self.W_K(encoding)
@@ -89,7 +91,8 @@ class MaskedAttention(Attention):
         atn_weights = F.softmax(masked_atn_scores, dim=-1)
         atn_output = atn_weights @ V
         atn_output = self.norm(atn_output + encoding) # Added residual connection + normalization!
-        return atn_output
+        out = self.project(atn_output)
+        return out
 
 class CrossAttention(nn.Module):
     def __init__(self, img_emb_dim, label_emb_dim, x_emb_dim=56):
@@ -115,8 +118,8 @@ class CrossAttention(nn.Module):
 
         xatn_output = self.x_ff(xatn_output)
         xatn_output = self.norm(xatn_output + label_encoding) # Added residual connection + normalization!
-
-        return xatn_output # image-enriched label encoding
+        x_out = self.project(xatn_output)
+        return x_out # image-enriched label encoding
 
 ### FEEDFORWARD ###
 class FeedForward(nn.Module):
@@ -145,7 +148,7 @@ class ImageEncoder(nn.Module):
 
 
         self.atn_blocks = [Attention(self.img_emb_dim) for _ in range(1)]
-
+        self.project = nn.Linear(self.img_emb_dim, self.img_emb_dim)
         self.img_ff = FeedForward(self.img_emb_dim, 
                                   self.img_emb_dim * 4)
     
@@ -153,7 +156,9 @@ class ImageEncoder(nn.Module):
         img_embedding = self.linear_layer(x)
         for atn_block in self.atn_blocks:
             x = atn_block(img_embedding)
+        img_encoding = self.project(img_encoding)
         img_encoding = self.img_ff(img_embedding)
+
         return img_encoding
     
 class LabelEncoder(nn.Module):
@@ -190,7 +195,7 @@ class ImageLabelingModel(nn.Module):
                                                x_emb_dim=56) 
                                                for _ in range(num_xatn_blocks)]
         
-        self.projection_layer = nn.Linear(self.LabelEncoder.label_emb_dim, 
+        self.project = nn.Linear(self.LabelEncoder.label_emb_dim, 
                                           self.LabelEncoder.vocab_size)
     
     def forward(self, image, label):
@@ -198,7 +203,7 @@ class ImageLabelingModel(nn.Module):
         label_encoding = self.LabelEncoder(label)
         for cross_atn in self.CrossAttention_blocks:
             label_encoding = cross_atn(label_encoding, img_encoding)
-        logits = self.projection_layer(label_encoding)
+        logits = self.project(label_encoding)
         return logits
 
 if __name__ == "__main__":
