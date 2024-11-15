@@ -1,0 +1,292 @@
+
+import torch
+from torchvision import datasets, transforms
+import random
+from PIL import Image
+import numpy as np
+import torch.nn as nn
+import torch.nn.functional as F
+import wandb
+from datetime import datetime
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+
+
+torch.manual_seed(42)
+random.seed(42)
+np.random.seed(42)
+
+
+# ## Define the transformations to the MINST data
+
+class Combine(torch.utils.data.Dataset):
+    def __init__(self):
+        super().__init__()
+        self.tf = transform = transforms.Compose([transforms.ToTensor()])
+        self.ds = datasets.MNIST(root='./data', train=True, transform=self.tf, download=True)
+
+    def __len__(self):
+        return len(self.ds)
+    
+
+    def __getitem__(self, idx):
+        idx = random.sample(range(len(self)), 4)
+        store = []
+        label = []
+
+        for i in idx:
+            x, y = self.ds[i]
+            x = transforms.ToPILImage()(x).convert('L')  # Ensure mode 'L'
+
+            store.append(x)
+            label.append(y)
+
+        img = Image.new('L', (56, 56))
+
+        img.paste(store[0], (0, 0, 28, 28))      # top-left
+        img.paste(store[1], (28, 0, 56, 28))     # top-right
+        img.paste(store[2], (0, 28, 28, 56))     # bottom-left
+        img.paste(store[3], (28, 28, 56, 56))    # bottom-right
+        
+        return img, label
+
+
+minst = Combine()
+
+patch_pixel_num = 196 # should be 196
+assert patch_pixel_num == 196
+img_emb_dim = 256 # increased from 64
+linear_layer = nn.Linear(patch_pixel_num, img_emb_dim)
+W_QI = nn.Linear(img_emb_dim, img_emb_dim) 
+W_KI = nn.Linear(img_emb_dim, img_emb_dim)
+W_VI = nn.Linear(img_emb_dim, img_emb_dim)
+
+
+
+img_ff = nn.Sequential(
+    nn.Linear(img_emb_dim, img_emb_dim * 4),
+    nn.ReLU(),
+    nn.Dropout(0.1),
+    nn.Linear(img_emb_dim * 4, img_emb_dim)
+)
+
+
+id2label = {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9', 10: '<s>', 11: '<e>'}
+label2id = {v: k for k, v in id2label.items()}
+
+
+label_emb_size = 128 # increased from 32
+vocab_size = len(id2label)
+label_embedding_matrix = nn.Embedding(vocab_size, label_emb_size)
+
+W_QL = nn.Linear(label_emb_size, label_emb_size)
+W_KL = nn.Linear(label_emb_size, label_emb_size)
+W_VL = nn.Linear(label_emb_size, label_emb_size)
+
+
+
+
+x_emb_dim = 192 # increased from 56
+W_QX = nn.Linear(label_emb_size, x_emb_dim)
+W_KX = nn.Linear(img_emb_dim, x_emb_dim)
+W_VX = nn.Linear(img_emb_dim, label_emb_size)
+
+
+x_ff = nn.Sequential(
+    nn.Linear(label_emb_size, label_emb_size * 4),
+    nn.ReLU(),
+    nn.Dropout(0.1),
+    nn.Linear(label_emb_size * 4, label_emb_size)
+)
+
+# Add layer norms
+img_layer_norm = nn.LayerNorm(img_emb_dim)
+label_layer_norm = nn.LayerNorm(label_emb_size)
+x_layer_norm = nn.LayerNorm(label_emb_size)  # For final encoding
+
+
+project_layer = nn.Linear(label_emb_size, vocab_size)
+
+loss_fn = nn.CrossEntropyLoss()
+
+
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+optim = torch.optim.Adam(
+    list(label_embedding_matrix.parameters()) +
+    list(linear_layer.parameters()) +
+    list(W_QI.parameters()) +
+    list(W_KI.parameters()) +
+    list(W_VI.parameters()) +
+    list(W_QL.parameters()) +
+    list(W_KL.parameters()) +
+    list(W_VL.parameters()) +
+    list(W_QX.parameters()) +
+    list(W_KX.parameters()) +
+    list(W_VX.parameters()) +
+    list(img_ff.parameters()) +
+    list(x_ff.parameters()) +
+    list(project_layer.parameters()) +
+    list(img_layer_norm.parameters()) +  # Add new layer norms
+    list(label_layer_norm.parameters()) +
+    list(x_layer_norm.parameters()),
+    lr=1e-4
+)
+
+scheduler = ReduceLROnPlateau(
+    optimizer=optim,
+    mode='min',
+    factor=0.7,
+    patience=3,
+    verbose=True,
+    min_lr=1e-6
+)
+
+
+num_of_epochs = 100
+num_examples = 2000
+
+wandb.init(project="mm_transformers_v1", name=f"gpt_{timestamp}")
+
+
+for epoch in range(num_of_epochs):
+    epoch_loss = 0
+    epoch_accuracy = 0
+    num_batches = 0
+
+    for i in range(num_examples):  # how many images to train on?
+        
+        img, label_store = minst[i]
+
+        # Prepare IMAGE
+        grid_size = 14
+        overall_grid_num = 16
+
+        img = np.array(img).reshape(overall_grid_num, grid_size, grid_size)
+        flattened_patches = torch.tensor(np.array([patch.flatten() for patch in img]), dtype=torch.float32)
+
+        # Prepare LABEL
+        label = [10] + label_store
+        label = torch.tensor(label)
+
+        actual = label_store + [11]
+        actual = torch.tensor(actual)
+        # Data PREPARED!
+
+        ### IMAGE ENCODER ###
+        img_embeddings = linear_layer(flattened_patches)
+        norm_img = img_layer_norm(img_embeddings)
+        qi = W_QI(norm_img)
+        ki = W_KI(norm_img)
+        vi = W_VI(norm_img)
+
+        QKI = qi @ ki.T
+        QKI = QKI / torch.sqrt(torch.tensor(img_emb_dim, dtype=torch.float32))
+        softmax_QKI = F.softmax(QKI, dim=-1)
+
+        img_encoding = softmax_QKI @ vi + img_embeddings # Add residual
+
+        norm_img = img_layer_norm(img_encoding)  # Normalize attention output
+        ff_output = img_ff(norm_img)  
+        img_encoding = ff_output + img_encoding  # Add residual        
+
+        ### IMAGE ENCODER END! ### 
+
+        ### DECODER ###
+        # LABEL ENCODING
+        label_embedding = label_embedding_matrix(label)
+        norm_label = label_layer_norm(label_embedding)
+        ql = W_QL(norm_label)
+        kl = W_KL(norm_label)
+        vl = W_VL(norm_label)
+
+
+        QKL = ql @ kl.T
+
+        negative_inf = torch.full_like(QKL, float('-inf'))
+        masked_QKL = torch.triu(negative_inf, diagonal=1)
+
+        QKL = QKL + masked_QKL
+
+        QKL = QKL / torch.sqrt(torch.tensor(label_emb_size, dtype=torch.float32))        
+        softmax_QKL = F.softmax(QKL, dim=-1)
+
+        label_encoding = softmax_QKL @ vl + label_embedding  # Add residual
+        # LABEL ENCODING END!
+        # CROSS ATTENTION
+        norm_label = label_layer_norm(label_encoding)  
+        norm_img = img_layer_norm(img_encoding)   
+        qx = W_QX(norm_label)
+        kx = W_KX(norm_img)
+        vx = W_VX(norm_img)
+
+        QKX = qx @ kx.T # Cross Attention Matrix
+        QKX = QKX / np.sqrt(x_emb_dim) # Scaling
+        softmax_QKX = F.softmax(QKX, dim=-1) # Softmax
+
+        x_encoding = softmax_QKX @ vx + label_encoding  # Add residual # Cross Attention Encoding, "image-enriched label encoding"
+        norm_x = x_layer_norm(x_encoding)  # Normalize cross attention output
+        x_encoding = x_ff(norm_x) + x_encoding  # Add residual # Feed Forward Network
+        # CROSS ATTENTION END!
+
+        # PROJECT TO VOCAB
+        logits = project_layer(x_encoding)
+        
+        # LOSS
+        loss = loss_fn(logits, actual)
+
+        # Get predictions for each position in the sequence
+        probs = F.softmax(logits, dim=-1)
+        predictions = torch.argmax(probs, dim=-1)
+
+        # Calculate accuracy
+        correct = (predictions == actual).sum().item()
+        total = len(actual)
+        accuracy = correct / total
+
+        # Update epoch metrics
+        epoch_loss += loss.item()
+        epoch_accuracy += accuracy
+        num_batches += 1
+
+        # BACKPROP
+        optim.zero_grad()
+        loss.backward()
+        optim.step()
+
+        wandb.log({
+            "loss": loss.item(),
+            "accuracy": accuracy
+        })
+
+        if i % 50 == 0:
+            print(f"Epoch {epoch+1}/{num_of_epochs}")
+            print(f"Loss: {loss.item():.4f}, Accuracy: {accuracy:.2%}")
+            print(f"Predictions: {[id2label[p.item()] for p in predictions]}")
+            print(f"Actual: {[id2label[a.item()] for a in actual]}")
+            print("-" * 50)
+
+    # Calculate epoch averages
+    avg_epoch_loss = epoch_loss / num_batches
+    avg_epoch_accuracy = epoch_accuracy / num_batches
+
+    # Step the scheduler at the end of each epoch
+    scheduler.step(avg_epoch_loss)
+
+    # Log epoch metrics
+    wandb.log({
+        "epoch": epoch + 1,
+        "epoch_loss": avg_epoch_loss,
+        "epoch_accuracy": avg_epoch_accuracy,
+        "learning_rate": optim.param_groups[0]['lr']
+    })
+
+    # Print epoch summary
+    print(f"\nEpoch {epoch+1} Summary:")
+    print(f"Average Loss: {avg_epoch_loss:.4f}")
+    print(f"Average Accuracy: {avg_epoch_accuracy:.2%}")
+    print(f"Learning Rate: {optim.param_groups[0]['lr']:.6f}")
+    print("=" * 50 + "\n")
+
+wandb.finish()
+
+
+
