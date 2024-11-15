@@ -22,6 +22,7 @@ def prep_img(img,
                                 smaller_patch_size, 
                                 smaller_patch_size)
     flattened_patches = [patch.flatten() for patch in img]
+    flattened_patches = np.array(flattened_patches)
     flattened_patches = torch.tensor(flattened_patches, dtype=torch.float32)
     
     return flattened_patches
@@ -122,14 +123,16 @@ def train(num_epochs=10, num_examples=1):
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     """
-    [ ] Train: 100000 epochs, 1 example, 8 (x)atn blocks, patch_pixel_num=196, img_emb_dim=64, label_emb_dim=32, vocab_size=12
+    [x] Train: 100000 epochs, 1 example, 8 (x)atn blocks, patch_pixel_num=196, img_emb_dim=64, label_emb_dim=32, vocab_size=12
+        - Converged after 20k epochs
+        - Loss: 2.34
     [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections
     [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus linear projection in attention
     [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus linear projection in attention, plus dropout
     [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus linear projection in attention, plus dropout, plus positional encoding
     """
     
-    wandb.init(project="mlx5.4-transformers", name=f"py-image-encoder-[tbd]-{timestamp}")
+    wandb.init(project="mlx5.4-transformers", name=f"py-image-encoder-1c0301d-{timestamp}")
 
     for epoch in range(num_epochs):
         for i in range(num_examples):
@@ -153,7 +156,7 @@ def train(num_epochs=10, num_examples=1):
                 "accuracy": (logits.argmax(dim=1) == actual).float().mean()
             })
 
-            if epoch % 5 == 0:
+            if epoch % 5000 == 0:
                 print(f'epoch: {epoch}, example: {i}')
                 img.show()
                 print('Actual:', label)
@@ -165,4 +168,4 @@ def train(num_epochs=10, num_examples=1):
     
 
 if __name__ == "__main__":
-    train()
+    train(num_epochs=300000, num_examples=1)
