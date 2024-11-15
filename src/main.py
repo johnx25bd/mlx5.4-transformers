@@ -1,5 +1,6 @@
 import wandb
 import torch
+import subprocess
 import numpy as np
 import torch.nn as nn
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -112,25 +113,8 @@ def test_label_encoder(learning_rate=0.001,
     print('pred:', pred)
 
 def train(num_epochs=10, num_examples=1):
-    ds = Combine()
-    model = ImageLabelingModel(patch_pixel_num=196, 
-                              img_emb_dim=64, 
-                              label_emb_dim=32, 
-                              vocab_size=12,
-                              num_atn_blocks=8)
     
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
-    loss_fn = nn.CrossEntropyLoss()
-    scheduler = ReduceLROnPlateau(optimizer, 
-                                  mode='min', 
-                                  factor=0.7, 
-                                  patience=10,
-                                  threshold=0.01,
-                                  cooldown=5,
-                                  min_lr=1e-8,
-                                  verbose=True)
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    
     """
     [x] Train: 100000 epochs, 1 example, 8 (x)atn blocks, patch_pixel_num=196, img_emb_dim=64, label_emb_dim=32, vocab_size=12
         - Converged after ~350 epochs
@@ -150,21 +134,45 @@ def train(num_epochs=10, num_examples=1):
         - Strange behavior, immediately dropped to loss of near zero, then up to 1.6, then after ~35k examples loss began to slowly drop
     [x] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention, plus dropout
         - Quickly (3000 examples) converged to a loss of 1.6, then stayed pretty constant
-    [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention, plus dropout, plus positional encoding
+    [x] FIX: Fixed bug in attention block, now converges quickly
+    [x] Train: 50 epochs, 2000 examples 😳
+        - Loss kep dropping but did not see improvement in predictions, which seems odd? 
+    [ ] Train: 50 epochs, 2000 examples, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention, plus dropout, plus positional encoding
+    [ ] Train: 50 epochs, 2000 examples, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention, plus dropout, plus positional encoding, plus multi-head attention
     """
-    
-    wandb.init(project="mlx5.4-transformers", name=f"py-image-encoder-efa207a-{timestamp}")
+    commit_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode('utf-8').strip()
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
-    orig_img, orig_label = ds[0]  
+    ds = Combine()
+    model = ImageLabelingModel(patch_pixel_num=196, 
+                              img_emb_dim=64, 
+                              label_emb_dim=32, 
+                              vocab_size=12,
+                              num_atn_blocks=8)
+    
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+    loss_fn = nn.CrossEntropyLoss()
+    scheduler = ReduceLROnPlateau(optimizer, 
+                                  mode='min', 
+                                  factor=0.7, 
+                                  patience=10,
+                                  threshold=0.01,
+                                  cooldown=5,
+                                  min_lr=1e-8,
+                                  verbose=True)
+    
+    wandb.init(project="mlx5.4-transformers", 
+               name=f"py-image-encoder-{commit_hash}-{timestamp}")
+
     epoch_loss = 0
     for epoch in range(num_epochs):
         for i in range(num_examples):
             
+            orig_img, orig_label = ds[i]  
 
             actual = torch.LongTensor(orig_label.copy() + [11])
             label = torch.LongTensor([10] + orig_label.copy())
-            # print(label.shape)
-
             
             img_flattened = prep_img(orig_img)
             logits = model(img_flattened, label)
@@ -191,7 +199,7 @@ def train(num_epochs=10, num_examples=1):
             avg_epoch_loss = epoch_loss / 100
             scheduler.step(avg_epoch_loss)
             epoch_loss = 0
-            if epoch % 1000 == 0:
+            if epoch % 10000 == 0:
                 print(f'Epoch {epoch} completed, avg_loss: {avg_epoch_loss}')
     wandb.finish()
 
@@ -199,4 +207,4 @@ def train(num_epochs=10, num_examples=1):
     
 
 if __name__ == "__main__":
-    train(100000, 1)
+    train(2000, 50)

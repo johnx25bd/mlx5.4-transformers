@@ -1,9 +1,12 @@
+import math
+import random
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-import random
+
 from PIL import Image
 
 random.seed(42)
@@ -40,6 +43,22 @@ class Combine(torch.utils.data.Dataset):
         img.paste(store[3], (28, 28, 56, 56))    # bottom-right
         
         return img, label
+
+### POSITIONAL ENCODING ###
+class PositionalEncoding(nn.Module):
+    def __init__(self, emb_size, max_len=16):
+        super(PositionalEncoding, self).__init__()
+        position = torch.arange(0, max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, emb_size, 2) * (-math.log(1000.0) / emb_size))
+        pe = torch.zeros(max_len, emb_size)
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        x = x + self.pe[:, :x.size(1)]
+        return x
 
 
 ### ATTENTION ###
@@ -145,20 +164,25 @@ class FeedForward(nn.Module):
 
 ### ENCODERS ###
 class ImageEncoder(nn.Module):
-    def __init__(self, patch_pixel_num=196, img_emb_dim=64):
+    def __init__(self, patch_num=16, patch_pixel_num=196, img_emb_dim=64):
         super(ImageEncoder, self).__init__()
+        self.patch_num = patch_num
         self.patch_pixel_num = patch_pixel_num
+
+        self.positional_encoding = PositionalEncoding(self.patch_num)
+
         self.img_emb_dim = img_emb_dim
         self.linear_layer = nn.Linear(self.patch_pixel_num, 
                                       self.img_emb_dim)
 
 
-        self.atn_blocks = [Attention(self.img_emb_dim) for _ in range(1)]
+        self.atn_blocks = nn.ModuleList([Attention(self.img_emb_dim) for _ in range(1)])
         self.project = nn.Linear(self.img_emb_dim, self.img_emb_dim)
         self.img_ff = FeedForward(self.img_emb_dim, 
                                   self.img_emb_dim * 4)
     
     def forward(self, x):
+        x = self.positional_encoding(x)
         img_embedding = self.linear_layer(x)
         for atn_block in self.atn_blocks:
             img_embedding = atn_block(img_embedding)
@@ -168,15 +192,18 @@ class ImageEncoder(nn.Module):
         return img_encoding
     
 class LabelEncoder(nn.Module):
-    def __init__(self, label_emb_dim=32, vocab_size=12, num_atn_blocks=5):
+    def __init__(self, label_len=5, label_emb_dim=32, vocab_size=12, num_atn_blocks=5):
         super(LabelEncoder, self).__init__()
+        self.label_len = label_len
+        self.positional_encoding = PositionalEncoding(self.label_len)
         self.label_emb_dim = label_emb_dim
         self.vocab_size = vocab_size
         self.label_embedding_matrix = nn.Embedding(self.vocab_size, self.label_emb_dim)
 
-        self.atn_blocks = [Attention(self.label_emb_dim) for _ in range(num_atn_blocks)]
+        self.atn_blocks = nn.ModuleList([Attention(self.label_emb_dim) for _ in range(num_atn_blocks)])
 
     def forward(self, labels):
+        labels = self.positional_encoding(labels)
         label_encoding = self.label_embedding_matrix(labels)
         for atn_block in self.atn_blocks:
             label_encoding = atn_block(label_encoding)
