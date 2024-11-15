@@ -146,12 +146,14 @@ def train(num_epochs=10, num_examples=1):
         - Loss mirrored prior behavior, then dropped off again quickly. Second convergence at 0.666
         - Accuracy rose between epoch 10k and 15k, to 0.6, then at 35727 jumped to 0.8
         - Weird behavior, but it's learning ... ? 🤷‍♂️
-    [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention
+    [x] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention
+        - Strange behavior, immediately dropped to loss of near zero, then up to 1.6, then after ~35k examples loss began to slowly drop
+        - 
     [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention, plus dropout
     [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention, plus dropout, plus positional encoding
     """
     
-    wandb.init(project="mlx5.4-transformers", name=f"py-image-encoder-5e7eca3-{timestamp}")
+    wandb.init(project="mlx5.4-transformers", name=f"py-image-encoder-06a6b2a-{timestamp}")
 
     orig_img, orig_label = ds[0]  
     epoch_loss = 0

@@ -50,8 +50,9 @@ class Attention(nn.Module):
         self.W_Q = nn.Linear(self.emb_size, self.emb_size)
         self.W_K = nn.Linear(self.emb_size, self.emb_size)
         self.W_V = nn.Linear(self.emb_size, self.emb_size)
+        self.dropout = nn.Dropout(0.1)
         self.norm = nn.LayerNorm(self.emb_size)
-        # self.project = nn.Linear(self.emb_size, self.emb_size)
+        self.project = nn.Linear(self.emb_size, self.emb_size)
 
     def forward(self, encoding):
         Q = self.W_Q(encoding)
@@ -61,6 +62,7 @@ class Attention(nn.Module):
         atn_scores = Q @ K.T
         atn_weights = F.softmax(atn_scores, dim=-1)
         atn_output = atn_weights @ V
+        atn_output = self.dropout(atn_output)
         atn_output = self.norm(atn_output + encoding) # Added residual connection + normalization!
         # Bes projects here!
         out = self.project(atn_output)
@@ -73,6 +75,7 @@ class MaskedAttention(Attention):
         self.W_Q = nn.Linear(self.emb_size, self.emb_size)
         self.W_K = nn.Linear(self.emb_size, self.emb_size)
         self.W_V = nn.Linear(self.emb_size, self.emb_size)
+        self.dropout = nn.Dropout(0.1)
         self.norm = nn.LayerNorm(self.emb_size)
         self.project = nn.Linear(self.emb_size, self.emb_size)
 
@@ -90,6 +93,7 @@ class MaskedAttention(Attention):
 
         atn_weights = F.softmax(masked_atn_scores, dim=-1)
         atn_output = atn_weights @ V
+        atn_output = self.dropout(atn_output)
         atn_output = self.norm(atn_output + encoding) # Added residual connection + normalization!
         out = self.project(atn_output)
         return out
@@ -104,9 +108,10 @@ class CrossAttention(nn.Module):
         self.W_QX = nn.Linear(self.label_emb_dim, self.x_emb_dim)
         self.W_KX = nn.Linear(self.img_emb_dim, self.x_emb_dim)
         self.W_VX = nn.Linear(self.img_emb_dim, self.label_emb_dim)
-
+        self.dropout = nn.Dropout(0.1)
         self.x_ff = FeedForward(self.label_emb_dim, self.label_emb_dim)
         self.norm = nn.LayerNorm(self.label_emb_dim)
+        self.project = nn.Linear(self.label_emb_dim, self.label_emb_dim)
     def forward(self, label_encoding, img_encoding):
         qx = self.W_QX(label_encoding)
         kx = self.W_KX(img_encoding)
@@ -115,7 +120,7 @@ class CrossAttention(nn.Module):
         xatn_scores = qx @ kx.T
         xatn_weights = F.softmax(xatn_scores, dim=-1)
         xatn_output = xatn_weights @ vx
-
+        xatn_output = self.dropout(xatn_output)
         xatn_output = self.x_ff(xatn_output)
         xatn_output = self.norm(xatn_output + label_encoding) # Added residual connection + normalization!
         x_out = self.project(xatn_output)
@@ -130,10 +135,11 @@ class FeedForward(nn.Module):
         self.l1 = nn.Linear(self.emb_dim, self.ff_dim)
         self.relu = nn.ReLU()
         self.l2 = nn.Linear(self.ff_dim, self.emb_dim)
-
+        self.dropout = nn.Dropout(0.1)
     def forward(self, x):
         x = self.l1(x)
         x = self.relu(x)
+        x = self.dropout(x)
         x = self.l2(x)
         return x
 
@@ -156,7 +162,7 @@ class ImageEncoder(nn.Module):
         img_embedding = self.linear_layer(x)
         for atn_block in self.atn_blocks:
             x = atn_block(img_embedding)
-        img_encoding = self.project(img_encoding)
+        img_encoding = self.project(img_embedding)
         img_encoding = self.img_ff(img_embedding)
 
         return img_encoding
