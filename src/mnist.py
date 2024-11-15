@@ -1,0 +1,202 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torchvision.transforms as transforms
+import torchvision.datasets as datasets
+import random
+from PIL import Image
+
+random.seed(42)
+
+### DATA ###
+class Combine(torch.utils.data.Dataset):
+    def __init__(self):
+        super().__init__()
+        self.tf = transforms.ToTensor()
+        self.ds = datasets.MNIST(root='./data', train=True, transform=self.tf, download=True)
+
+    def __len__(self):
+        return len(self.ds)
+    
+
+    def __getitem__(self, idx):
+        idx = random.sample(range(len(self)), 4)
+        store = []
+        label = []
+
+        for i in idx:
+            x, y = self.ds[i]
+            x = transforms.ToPILImage()(x).convert('L')  # Ensure mode 'L'
+
+            store.append(x)
+            label.append(y)
+
+        img = Image.new('L', (56, 56))
+
+        img.paste(store[0], (0, 0, 28, 28))      # top-left
+        img.paste(store[1], (28, 0, 56, 28))     # top-right
+        img.paste(store[2], (0, 28, 28, 56))     # bottom-left
+        img.paste(store[3], (28, 28, 56, 56))    # bottom-right
+        
+        return img, label
+
+
+### ATTENTION ###
+class Attention(nn.Module):
+    def __init__(self, emb_size):
+        super(Attention, self).__init__()
+        self.emb_size = emb_size
+        self.W_Q = nn.Linear(self.emb_size, self.emb_size)
+        self.W_K = nn.Linear(self.emb_size, self.emb_size)
+        self.W_V = nn.Linear(self.emb_size, self.emb_size)
+        # self.project = nn.Linear(self.emb_size, self.emb_size)
+
+    def forward(self, encoding):
+        Q = self.W_Q(encoding)
+        K = self.W_K(encoding)
+        V = self.W_V(encoding)
+
+        atn_scores = Q @ K.T
+        atn_weights = F.softmax(atn_scores, dim=-1)
+        atn_output = atn_weights @ V
+        # Bes projects here!
+        # out = self.project(atn_output)
+        return atn_output # return out
+
+class MaskedAttention(Attention):
+    def __init__(self, emb_size):
+        super(Attention, self).__init__()
+        self.emb_size = emb_size
+        self.W_Q = nn.Linear(self.emb_size, self.emb_size)
+        self.W_K = nn.Linear(self.emb_size, self.emb_size)
+        self.W_V = nn.Linear(self.emb_size, self.emb_size)
+
+    def forward(self, encoding):
+        Q = self.W_Q(encoding)
+        K = self.W_K(encoding)
+        V = self.W_V(encoding)
+
+        atn_scores = Q @ K.T
+
+        negative_inf = torch.full_like(atn_scores, float('-inf'))
+        mask = torch.triu(negative_inf, diagonal=1)
+
+        masked_atn_scores = atn_scores + mask
+
+        atn_weights = F.softmax(masked_atn_scores, dim=-1)
+        atn_output = atn_weights @ V
+
+        return atn_output
+
+class CrossAttention(nn.Module):
+    def __init__(self, img_emb_dim, label_emb_dim, x_emb_dim=56):
+        super(CrossAttention, self).__init__()
+        self.img_emb_dim = img_emb_dim
+        self.label_emb_dim = label_emb_dim
+        self.x_emb_dim = x_emb_dim
+
+        self.W_QX = nn.Linear(self.label_emb_dim, self.x_emb_dim)
+        self.W_KX = nn.Linear(self.img_emb_dim, self.x_emb_dim)
+        self.W_VX = nn.Linear(self.img_emb_dim, self.label_emb_dim)
+
+        self.x_ff = FeedForward(self.label_emb_dim, self.label_emb_dim)
+
+    def forward(self, label_encoding, img_encoding):
+        qx = self.W_QX(label_encoding)
+        kx = self.W_KX(img_encoding)
+        vx = self.W_VX(img_encoding)
+
+        xatn_scores = qx @ kx.T
+        xatn_weights = F.softmax(xatn_scores, dim=-1)
+        xatn_output = xatn_weights @ vx
+
+        xatn_output = self.x_ff(xatn_output)
+
+        return xatn_output # image-enriched label encoding
+
+### FEEDFORWARD ###
+class FeedForward(nn.Module):
+    def __init__(self, emb_dim, ff_dim):
+        super(FeedForward, self).__init__()
+        self.emb_dim = emb_dim
+        self.ff_dim = ff_dim
+        self.l1 = nn.Linear(self.emb_dim, self.ff_dim)
+        self.relu = nn.ReLU()
+        self.l2 = nn.Linear(self.ff_dim, self.emb_dim)
+
+    def forward(self, x):
+        x = self.l1(x)
+        x = self.relu(x)
+        x = self.l2(x)
+        return x
+
+### ENCODERS ###
+class ImageEncoder(nn.Module):
+    def __init__(self, patch_pixel_num=196, img_emb_dim=64):
+        super(ImageEncoder, self).__init__()
+        self.patch_pixel_num = patch_pixel_num
+        self.img_emb_dim = img_emb_dim
+        self.linear_layer = nn.Linear(self.patch_pixel_num, 
+                                      self.img_emb_dim)
+
+
+        self.atn_blocks = [Attention(self.img_emb_dim) for _ in range(1)]
+
+        self.img_ff = FeedForward(self.img_emb_dim, 
+                                  self.img_emb_dim * 4)
+    
+    def forward(self, x):
+        img_embedding = self.linear_layer(x)
+        for atn_block in self.atn_blocks:
+            x = atn_block(img_embedding)
+        img_encoding = self.img_ff(img_embedding)
+        return img_encoding
+    
+class LabelEncoder(nn.Module):
+    def __init__(self, label_emb_dim=32, vocab_size=12, num_atn_blocks=5):
+        super(LabelEncoder, self).__init__()
+        self.label_emb_dim = label_emb_dim
+        self.vocab_size = vocab_size
+        self.label_embedding_matrix = nn.Embedding(self.vocab_size, self.label_emb_dim)
+
+        self.atn_blocks = [Attention(self.label_emb_dim) for _ in range(num_atn_blocks)]
+
+    def forward(self, labels):
+        label_encoding = self.label_embedding_matrix(labels)
+        for atn_block in self.atn_blocks:
+            atn_output = atn_block(label_encoding)
+        
+        return atn_output
+
+
+### MODEL ###
+
+class ImageLabelingModel(nn.Module):
+    def __init__(self, patch_pixel_num=196, 
+                 img_emb_dim=64, 
+                 label_emb_dim=32, 
+                 vocab_size=12, 
+                 num_atn_blocks=5,
+                 num_xatn_blocks=5):
+        super(ImageLabelingModel, self).__init__()
+        self.ImageEncoder = ImageEncoder(patch_pixel_num, img_emb_dim)
+        self.LabelEncoder = LabelEncoder(label_emb_dim, vocab_size, num_atn_blocks)
+        self.CrossAttention_blocks = [CrossAttention(self.ImageEncoder.img_emb_dim, 
+                                               self.LabelEncoder.label_emb_dim, 
+                                               x_emb_dim=56) 
+                                               for _ in range(num_xatn_blocks)]
+        
+        self.projection_layer = nn.Linear(self.LabelEncoder.label_emb_dim, 
+                                          self.LabelEncoder.vocab_size)
+    
+    def forward(self, image, label):
+        img_encoding = self.ImageEncoder(image)
+        label_encoding = self.LabelEncoder(label)
+        for cross_atn in self.CrossAttention_blocks:
+            label_encoding = cross_atn(label_encoding, img_encoding)
+        logits = self.projection_layer(label_encoding)
+        return logits
+
+if __name__ == "__main__":
+    model = ImageLabelingModel(patch_pixel_num=196, img_emb_dim=64, label_emb_dim=32, vocab_size=12)
+    print(model)
