@@ -161,7 +161,7 @@ class ImageEncoder(nn.Module):
     def forward(self, x):
         img_embedding = self.linear_layer(x)
         for atn_block in self.atn_blocks:
-            x = atn_block(img_embedding)
+            img_embedding = atn_block(img_embedding)
         img_encoding = self.project(img_embedding)
         img_encoding = self.img_ff(img_embedding)
 
@@ -179,9 +179,9 @@ class LabelEncoder(nn.Module):
     def forward(self, labels):
         label_encoding = self.label_embedding_matrix(labels)
         for atn_block in self.atn_blocks:
-            atn_output = atn_block(label_encoding)
+            label_encoding = atn_block(label_encoding)
         
-        return atn_output
+        return label_encoding
 
 
 ### MODEL ###

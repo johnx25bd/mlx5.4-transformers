@@ -148,12 +148,12 @@ def train(num_epochs=10, num_examples=1):
         - Weird behavior, but it's learning ... ? 🤷‍♂️
     [x] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention
         - Strange behavior, immediately dropped to loss of near zero, then up to 1.6, then after ~35k examples loss began to slowly drop
-        - 
-    [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention, plus dropout
+    [x] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention, plus dropout
+        - Quickly (3000 examples) converged to a loss of 1.6, then stayed pretty constant
     [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention, plus dropout, plus positional encoding
     """
     
-    wandb.init(project="mlx5.4-transformers", name=f"py-image-encoder-06a6b2a-{timestamp}")
+    wandb.init(project="mlx5.4-transformers", name=f"py-image-encoder-efa207a-{timestamp}")
 
     orig_img, orig_label = ds[0]  
     epoch_loss = 0
