@@ -10,7 +10,7 @@ import wandb
 from datetime import datetime
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from attention import MultiHeadAttention
-
+from loss import LabelSmoothingLoss
 
 torch.manual_seed(42)
 random.seed(42)
@@ -60,7 +60,7 @@ linear_layer = nn.Linear(patch_pixel_num, img_emb_dim)
 # W_QI = nn.Linear(img_emb_dim, img_emb_dim) 
 # W_KI = nn.Linear(img_emb_dim, img_emb_dim)
 # W_VI = nn.Linear(img_emb_dim, img_emb_dim)
-img_attention = MultiHeadAttention(d_model=img_emb_dim, num_heads=8)
+img_attention = MultiHeadAttention(d_model=img_emb_dim, num_heads=8, dropout=0.1)
 
 
 
@@ -83,7 +83,7 @@ label_embedding_matrix = nn.Embedding(vocab_size, label_emb_size)
 # W_QL = nn.Linear(label_emb_size, label_emb_size)
 # W_KL = nn.Linear(label_emb_size, label_emb_size)
 # W_VL = nn.Linear(label_emb_size, label_emb_size)
-label_attention = MultiHeadAttention(d_model=label_emb_size, num_heads=8)
+label_attention = MultiHeadAttention(d_model=label_emb_size, num_heads=8, dropout=0.1)
 
 
 
@@ -95,7 +95,8 @@ x_emb_dim = 192 # increased from 56
 cross_attention = MultiHeadAttention(
     d_model=label_emb_size,  # output dimension (128)
     num_heads=8,
-    d_keys=img_emb_dim      # key/value dimension (256)
+    d_keys=img_emb_dim,      # key/value dimension (256)
+    dropout=0.1
 )
 
 
@@ -114,7 +115,8 @@ x_layer_norm = nn.LayerNorm(label_emb_size)  # For final encoding
 
 project_layer = nn.Linear(label_emb_size, vocab_size)
 
-loss_fn = nn.CrossEntropyLoss()
+# loss_fn = nn.CrossEntropyLoss()
+loss_fn = LabelSmoothingLoss(smoothing=0.1, vocab_size=len(id2label))
 
 
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -172,7 +174,7 @@ scheduler = ReduceLROnPlateau(
 num_of_epochs = 100
 num_examples = 2000
 
-wandb.init(project="mm_transformers_v1", name=f"gpt_multi_head_attention_{timestamp}")
+wandb.init(project="mm_transformers_v1", name=f"label_smoothing_loss_{timestamp}")
 
 
 for epoch in range(num_of_epochs):
@@ -287,7 +289,7 @@ for epoch in range(num_of_epochs):
             logits = logits.view(-1, logits.size(-1))
             actual = actual.view(-1)
             loss = loss_fn(logits, actual)
-            
+
         # Get predictions for each position in the sequence
         probs = F.softmax(logits, dim=-1)
         predictions = torch.argmax(probs, dim=-1)
