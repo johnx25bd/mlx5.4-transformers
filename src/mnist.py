@@ -50,7 +50,6 @@ class Attention(nn.Module):
         self.W_Q = nn.Linear(self.emb_size, self.emb_size)
         self.W_K = nn.Linear(self.emb_size, self.emb_size)
         self.W_V = nn.Linear(self.emb_size, self.emb_size)
-        self.norm = nn.LayerNorm(self.emb_size)
         # self.project = nn.Linear(self.emb_size, self.emb_size)
 
     def forward(self, encoding):
@@ -61,7 +60,6 @@ class Attention(nn.Module):
         atn_scores = Q @ K.T
         atn_weights = F.softmax(atn_scores, dim=-1)
         atn_output = atn_weights @ V
-        atn_output = self.norm(atn_output + encoding) # Added residual connection + normalization!
         # Bes projects here!
         # out = self.project(atn_output)
         return atn_output # return out
@@ -73,7 +71,7 @@ class MaskedAttention(Attention):
         self.W_Q = nn.Linear(self.emb_size, self.emb_size)
         self.W_K = nn.Linear(self.emb_size, self.emb_size)
         self.W_V = nn.Linear(self.emb_size, self.emb_size)
-        self.norm = nn.LayerNorm(self.emb_size)
+
     def forward(self, encoding):
         Q = self.W_Q(encoding)
         K = self.W_K(encoding)
@@ -88,7 +86,7 @@ class MaskedAttention(Attention):
 
         atn_weights = F.softmax(masked_atn_scores, dim=-1)
         atn_output = atn_weights @ V
-        atn_output = self.norm(atn_output + encoding) # Added residual connection + normalization!
+
         return atn_output
 
 class CrossAttention(nn.Module):
@@ -103,7 +101,7 @@ class CrossAttention(nn.Module):
         self.W_VX = nn.Linear(self.img_emb_dim, self.label_emb_dim)
 
         self.x_ff = FeedForward(self.label_emb_dim, self.label_emb_dim)
-        self.norm = nn.LayerNorm(self.label_emb_dim)
+
     def forward(self, label_encoding, img_encoding):
         qx = self.W_QX(label_encoding)
         kx = self.W_KX(img_encoding)
@@ -114,7 +112,6 @@ class CrossAttention(nn.Module):
         xatn_output = xatn_weights @ vx
 
         xatn_output = self.x_ff(xatn_output)
-        xatn_output = self.norm(xatn_output + label_encoding) # Added residual connection + normalization!
 
         return xatn_output # image-enriched label encoding
 
