@@ -2,6 +2,7 @@ import wandb
 import torch
 import numpy as np
 import torch.nn as nn
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from datetime import datetime
 
 from mnist import Combine, \
@@ -118,24 +119,38 @@ def train(num_epochs=10, num_examples=1):
                               vocab_size=12,
                               num_atn_blocks=8)
     
+
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     loss_fn = nn.CrossEntropyLoss()
-
+    scheduler = ReduceLROnPlateau(optimizer, 
+                                  mode='min', 
+                                  factor=0.7, 
+                                  patience=10,
+                                  threshold=0.01,
+                                  cooldown=5,
+                                  min_lr=1e-8,
+                                  verbose=True)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     """
     [x] Train: 100000 epochs, 1 example, 8 (x)atn blocks, patch_pixel_num=196, img_emb_dim=64, label_emb_dim=32, vocab_size=12
         - Converged after ~350 epochs
         - loss: 1.60944
         - accuracy: 0.2 (random)
-    [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections
-    [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus linear projection in attention
-    [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus linear projection in attention, plus dropout
-    [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus linear projection in attention, plus dropout, plus positional encoding
+    [x] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections
+        - Converged a bit more quickly
+        - Loss: almost identical
+        - Accuracy: 0.2 (random), with a few odd periods of 40% 🤔
+        - Adding in step decay to learning rate
+    [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay
+    [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention
+    [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention, plus dropout
+    [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus step decay, plus linear projection in attention, plus dropout, plus positional encoding
     """
     
-    wandb.init(project="mlx5.4-transformers", name=f"py-image-encoder-1c0301d-{timestamp}")
+    wandb.init(project="mlx5.4-transformers", name=f"py-image-encoder-345215e-{timestamp}")
 
     orig_img, orig_label = ds[0]  
+    epoch_loss = 0
     for epoch in range(num_epochs):
         for i in range(num_examples):
             
@@ -155,15 +170,22 @@ def train(num_epochs=10, num_examples=1):
 
             wandb.log({
                 "loss": loss.item(),
-                "accuracy": (logits.argmax(dim=1) == actual).float().mean()
+                "accuracy": (logits.argmax(dim=1) == actual).float().mean(),
+                "lr": optimizer.param_groups[0]['lr']
             })
-
+            epoch_loss += loss.item()
             if epoch % 20000 == 0:
                 print(f'epoch: {epoch}, example: {i}')
                 orig_img.show()
                 print('Actual:', label)
                 print('Pred:', logits.argmax(dim=1))
                 print("loss:", loss.item())
+        
+        if epoch % 100 == 0:
+            avg_epoch_loss = epoch_loss / 100
+            print(f'Epoch {epoch} completed, avg_loss: {avg_epoch_loss}')
+            scheduler.step(avg_epoch_loss)
+            epoch_loss = 0
     wandb.finish()
 
 
