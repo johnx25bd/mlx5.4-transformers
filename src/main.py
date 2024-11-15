@@ -132,18 +132,19 @@ def train(num_epochs=10, num_examples=1):
     [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus linear projection in attention, plus dropout, plus positional encoding
     """
     
-    wandb.init(project="mlx5.4-transformers", name=f"py-image-encoder-1c0301d-{timestamp}")
+    wandb.init(project="mlx5.4-transformers", name=f"py-image-encoder-eb1fc22-{timestamp}")
 
+    orig_img, orig_label = ds[0]  
     for epoch in range(num_epochs):
         for i in range(num_examples):
             
-            img, label = ds[i]
-            actual = torch.LongTensor(label + [11])
-            label = torch.LongTensor([10] + label)
+
+            actual = torch.LongTensor(orig_label.copy() + [11])
+            label = torch.LongTensor([10] + orig_label.copy())
             # print(label.shape)
 
             
-            img_flattened = prep_img(img)
+            img_flattened = prep_img(orig_img)
             logits = model(img_flattened, label)
 
             loss = loss_fn(logits, actual)
@@ -158,7 +159,7 @@ def train(num_epochs=10, num_examples=1):
 
             if epoch % 5000 == 0:
                 print(f'epoch: {epoch}, example: {i}')
-                img.show()
+                orig_img.show()
                 print('Actual:', label)
                 print('Pred:', logits.argmax(dim=1))
                 print("loss:", loss.item())
@@ -168,4 +169,4 @@ def train(num_epochs=10, num_examples=1):
     
 
 if __name__ == "__main__":
-    train(num_epochs=300000, num_examples=1)
+    train(num_epochs=100000, num_examples=1)

@@ -10,8 +10,9 @@ random.seed(42)
 
 ### DATA ###
 class Combine(torch.utils.data.Dataset):
-    def __init__(self):
+    def __init__(self, seed=42):
         super().__init__()
+        torch.manual_seed(42)
         self.tf = transforms.ToTensor()
         self.ds = datasets.MNIST(root='./data', train=True, transform=self.tf, download=True)
 
