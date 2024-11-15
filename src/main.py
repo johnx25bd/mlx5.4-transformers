@@ -133,7 +133,7 @@ def train(num_epochs=10, num_examples=1):
     [ ] Train: 100000 epochs, 1 example, as above, plus normalization + residual connections, plus linear projection in attention, plus dropout, plus positional encoding
     """
     
-    wandb.init(project="mlx5.4-transformers", name=f"py-image-encoder-[tbd]-{timestamp}")
+    wandb.init(project="mlx5.4-transformers", name=f"py-image-encoder-1c0301d-{timestamp}")
 
     orig_img, orig_label = ds[0]  
     for epoch in range(num_epochs):
