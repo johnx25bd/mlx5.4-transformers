@@ -116,7 +116,15 @@ x_layer_norm = nn.LayerNorm(label_emb_size)  # For final encoding
 project_layer = nn.Linear(label_emb_size, vocab_size)
 
 # loss_fn = nn.CrossEntropyLoss()
-loss_fn = LabelSmoothingLoss(smoothing=0.1, vocab_size=len(id2label))
+# loss_fn = LabelSmoothingLoss(smoothing=0.1, vocab_size=len(id2label))
+
+# Initialize with more conservative smoothing
+loss_fn = LabelSmoothingLoss(
+    smoothing=0.05,  # Reduced from 0.1
+    vocab_size=len(id2label),
+    ignore_index=-100,  
+    reduction='mean'
+)
 
 
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -174,7 +182,7 @@ scheduler = ReduceLROnPlateau(
 num_of_epochs = 100
 num_examples = 2000
 
-wandb.init(project="mm_transformers_v1", name=f"label_smoothing_loss_{timestamp}")
+wandb.init(project="mm_transformers_v1", name=f"conservative_label_smoothing_loss_{timestamp}")
 
 
 for epoch in range(num_of_epochs):
