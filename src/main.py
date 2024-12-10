@@ -144,11 +144,13 @@ def train(num_epochs=10, num_examples=1):
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
 
     ds = Combine()
-    model = ImageLabelingModel(patch_pixel_num=196, 
-                              img_emb_dim=64, 
-                              label_emb_dim=32, 
-                              vocab_size=12,
-                              num_atn_blocks=8)
+    model = ImageLabelingModel( patch_num=16, 
+                                patch_pixel_num=196, 
+                                img_emb_dim=64, 
+                                label_len=6,
+                                label_emb_dim=32, 
+                                vocab_size=12,
+                                num_atn_blocks=8)
     
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)

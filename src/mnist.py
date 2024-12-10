@@ -53,7 +53,7 @@ class PositionalEncoding(nn.Module):
         pe = torch.zeros(max_len, emb_size)
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0)
+        pe = pe.unsqueeze(0).T
         self.register_buffer('pe', pe)
 
     def forward(self, x):
@@ -169,7 +169,7 @@ class ImageEncoder(nn.Module):
         self.patch_num = patch_num
         self.patch_pixel_num = patch_pixel_num
 
-        self.positional_encoding = PositionalEncoding(self.patch_num)
+        self.positional_encoding = PositionalEncoding(patch_pixel_num, self.patch_num)
 
         self.img_emb_dim = img_emb_dim
         self.linear_layer = nn.Linear(self.patch_pixel_num, 
@@ -214,15 +214,17 @@ class LabelEncoder(nn.Module):
 ### MODEL ###
 
 class ImageLabelingModel(nn.Module):
-    def __init__(self, patch_pixel_num=196, 
+    def __init__(self, patch_num=16, 
+                 patch_pixel_num=196, 
                  img_emb_dim=64, 
+                 label_len=6,
                  label_emb_dim=32, 
                  vocab_size=12, 
                  num_atn_blocks=5,
                  num_xatn_blocks=5):
         super(ImageLabelingModel, self).__init__()
-        self.ImageEncoder = ImageEncoder(patch_pixel_num, img_emb_dim)
-        self.LabelEncoder = LabelEncoder(label_emb_dim, vocab_size, num_atn_blocks)
+        self.ImageEncoder = ImageEncoder(patch_num, patch_pixel_num, img_emb_dim)
+        self.LabelEncoder = LabelEncoder(label_len, label_emb_dim, vocab_size, num_atn_blocks)
         self.CrossAttention_blocks = [CrossAttention(self.ImageEncoder.img_emb_dim, 
                                                self.LabelEncoder.label_emb_dim, 
                                                x_emb_dim=56) 
